@@ -1,12 +1,12 @@
 # HyperEVM Precompile Demo
 
-Workshop demo showing how to read HyperCore L1 state from HyperEVM smart contracts, built for **Hyperliquid testnet**.
+Workshop demo showing how to read a spot price from HyperCore L1 via a HyperEVM smart contract, built for **Hyperliquid testnet**.
 
-HyperEVM exposes **read precompiles** — fixed system addresses that let any smart contract query L1 order book data (prices, balances, positions, etc.) via `staticcall`. No oracles, no bridges — the precompile returns the exact L1 state at block construction time.
+HyperEVM exposes **read precompiles** -- fixed system addresses that let any smart contract query L1 order book data (prices, balances, positions) via `staticcall`. No oracles, no bridges -- the precompile returns the exact L1 state at block construction time.
 
 ## Smart Contract
 
-[`contracts/src/PrecompileReader.sol`](contracts/src/PrecompileReader.sol) — a Solidity wrapper that exposes all 17 HyperCore read precompiles as typed view functions. For example, reading the spot price of any token:
+[`contracts/src/PrecompileReader.sol`](contracts/src/PrecompileReader.sol) wraps HyperCore read precompiles as typed view functions. The frontend uses `getSpotPx`:
 
 ```solidity
 function getSpotPx(uint64 spotIndex) external view returns (uint64) {
@@ -18,7 +18,7 @@ Under the hood, `PrecompileLib` does a `staticcall` to the system precompile at 
 
 ## Frontend
 
-A React UI that calls the wrapper contract's view functions via `eth_call`, letting you query any precompile from the browser without writing code.
+A single-page React app that calls `getSpotPx` via `eth_call` and displays the raw uint64 value alongside the computed USD price.
 
 ## Setup
 
@@ -27,6 +27,8 @@ corepack enable
 yarn install
 yarn dev
 ```
+
+Enter spot index `1460` to query the VHYPUR/USDC price on testnet.
 
 ## Deploying the Contract
 

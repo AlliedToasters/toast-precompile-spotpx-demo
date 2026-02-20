@@ -1,437 +1,160 @@
-import { useState, useMemo, useCallback } from "react";
-import { Separator } from "@/components/ui/separator";
-import { Input } from "@/components/ui/input";
-import { Sun, Moon, Github, Settings, RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/hooks/use-theme";
-import { makePublicClient, DEFAULT_RPC_URL } from "@/config/client";
+import { makePublicClient } from "@/config/client";
+import { CONTRACT_ADDRESS, CONTRACT_ABI } from "@/config/contract";
 import {
-  PrecompileCard,
-  type PrecompileConfig,
-} from "@/components/PrecompileCard";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-const precompiles: PrecompileConfig[] = [
-  {
-    functionName: "getL1BlockNumber",
-    title: "L1 Block Number",
-    description:
-      "Fetch the latest HyperCore L1 block number as seen by the EVM at block construction time.",
-    badge: "System",
-    inputs: [],
-  },
-  {
-    functionName: "getCoreUserExists",
-    title: "Core User Exists",
-    description:
-      "Check whether a given address exists as a user on HyperCore.",
-    badge: "User",
-    inputs: [
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-    ],
-  },
-  {
-    functionName: "getWithdrawable",
-    title: "Withdrawable",
-    description:
-      "Query the withdrawable balance for any user address on HyperCore.",
-    badge: "User",
-    inputs: [
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-    ],
-  },
-  {
-    functionName: "getOraclePx",
-    title: "Oracle Price",
-    description:
-      "Query the oracle price for a perpetual asset by its index.",
-    badge: "Perps",
-    inputs: [
-      {
-        name: "perpIndex",
-        label: "Perp Index",
-        placeholder: "e.g. 0 for BTC, 1 for ETH",
-        type: "uint32",
-      },
-    ],
-  },
-  {
-    functionName: "getMarkPx",
-    title: "Mark Price",
-    description:
-      "Query the mark price for a perpetual asset by its index.",
-    badge: "Perps",
-    inputs: [
-      {
-        name: "perpIndex",
-        label: "Perp Index",
-        placeholder: "e.g. 0 for BTC, 1 for ETH",
-        type: "uint32",
-      },
-    ],
-  },
-  {
-    functionName: "getBbo",
-    title: "Best Bid & Offer",
-    description:
-      "Get the current best bid and ask for an asset (perp or spot index).",
-    badge: "Perps",
-    inputs: [
-      {
-        name: "asset",
-        label: "Asset Index",
-        placeholder: "e.g. 0 for BTC perp, 1460 for VHYPUR spot",
-        type: "uint64",
-      },
-    ],
-  },
-  {
-    functionName: "getPerpAssetInfo",
-    title: "Perp Asset Info",
-    description:
-      "Look up metadata for a perpetual asset including coin name, decimals, max leverage, and margin table.",
-    badge: "Perps",
-    inputs: [
-      {
-        name: "perp",
-        label: "Perp Index",
-        placeholder: "e.g. 0",
-        type: "uint32",
-      },
-    ],
-  },
-  {
-    functionName: "getPosition",
-    title: "Position",
-    description:
-      "Query an open perpetual position for a given user and asset, including size, entry notional, leverage, and isolation mode.",
-    badge: "Perps",
-    inputs: [
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-      {
-        name: "perp",
-        label: "Perp Index",
-        placeholder: "e.g. 0",
-        type: "uint16",
-      },
-    ],
-  },
-  {
-    functionName: "getAccountMarginSummary",
-    title: "Account Margin Summary",
-    description:
-      "Get the margin summary for a user on a given perp dex, including account value, margin used, notional position, and raw USD.",
-    badge: "Perps",
-    inputs: [
-      {
-        name: "perpDexIndex",
-        label: "Perp Dex Index",
-        placeholder: "e.g. 0",
-        type: "uint32",
-      },
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-    ],
-  },
-  {
-    functionName: "getSpotBalance",
-    title: "Spot Balance",
-    description:
-      "Check a user's spot balance for a specific token, including total, on hold, and entry notional.",
-    badge: "Spot",
-    inputs: [
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-      {
-        name: "token",
-        label: "Token Index",
-        placeholder: "e.g. 0",
-        type: "uint64",
-      },
-    ],
-  },
-  {
-    functionName: "getSpotInfo",
-    title: "Spot Info",
-    description:
-      "Look up metadata for a spot market by index, including its name and the two token indices.",
-    badge: "Spot",
-    inputs: [
-      {
-        name: "spotIndex",
-        label: "Spot Index",
-        placeholder: "e.g. 1460 for VHYPUR/USDC",
-        type: "uint64",
-      },
-    ],
-  },
-  {
-    functionName: "getSpotPx",
-    title: "Spot Price",
-    description:
-      "Query the current price for a spot market by its index.",
-    badge: "Spot",
-    inputs: [
-      {
-        name: "spotIndex",
-        label: "Spot Index",
-        placeholder: "e.g. 1460 for VHYPUR/USDC",
-        type: "uint64",
-      },
-    ],
-  },
-  {
-    functionName: "getTokenInfo",
-    title: "Token Info",
-    description:
-      "Get full metadata for a token including name, deployer, EVM contract, spot markets, and decimal configuration.",
-    badge: "Spot",
-    inputs: [
-      {
-        name: "token",
-        label: "Token Index",
-        placeholder: "e.g. 1587 for VHYPUR",
-        type: "uint64",
-      },
-    ],
-  },
-  {
-    functionName: "getTokenSupply",
-    title: "Token Supply",
-    description:
-      "Query supply metrics for a token including max, total, circulating, future emissions, and non circulating holder balances.",
-    badge: "Spot",
-    inputs: [
-      {
-        name: "token",
-        label: "Token Index",
-        placeholder: "e.g. 1587 for VHYPUR",
-        type: "uint64",
-      },
-    ],
-  },
-  {
-    functionName: "getUserVaultEquity",
-    title: "User Vault Equity",
-    description:
-      "Query a user's equity in a specific vault, along with the lock expiry timestamp.",
-    badge: "Vaults",
-    inputs: [
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-      {
-        name: "vault",
-        label: "Vault Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-    ],
-  },
-  {
-    functionName: "getDelegations",
-    title: "Delegations",
-    description:
-      "View all staking delegations for an address, including validator, amount, and lock expiry.",
-    badge: "Staking",
-    inputs: [
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-    ],
-  },
-  {
-    functionName: "getDelegatorSummary",
-    title: "Delegator Summary",
-    description:
-      "Get the staking summary for a delegator including total delegated, undelegated, pending withdrawals, and withdrawal count.",
-    badge: "Staking",
-    inputs: [
-      {
-        name: "user",
-        label: "User Address",
-        placeholder: "0x...",
-        type: "address",
-      },
-    ],
-  },
-];
-
-function getStoredRpc(): string {
-  try {
-    return localStorage.getItem("customRpcUrl") || "";
-  } catch {
-    return "";
-  }
-}
+const publicClient = makePublicClient();
 
 function App() {
   const { theme, toggleTheme } = useTheme();
-  const [showSettings, setShowSettings] = useState(false);
-  const [customRpc, setCustomRpc] = useState(getStoredRpc);
+  const [spotIndex, setSpotIndex] = useState("");
+  const [rawResult, setRawResult] = useState<bigint | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleRpcChange = useCallback((value: string) => {
-    setCustomRpc(value);
+  const handleQuery = async () => {
+    setLoading(true);
+    setError(null);
+    setRawResult(null);
+
     try {
-      if (value.trim()) {
-        localStorage.setItem("customRpcUrl", value.trim());
+      const data = await publicClient.readContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: "getSpotPx",
+        args: [BigInt(spotIndex.trim() || "1460")],
+      });
+
+      setRawResult(data);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        const msg = err.message;
+        if (msg.includes("SpotPxPrecompileFailed")) {
+          setError("Spot price precompile call failed. Check the spot index.");
+        } else if (msg.includes("reverted")) {
+          setError("Contract call reverted. Check your input.");
+        } else {
+          setError(msg.length > 200 ? msg.slice(0, 200) + "..." : msg);
+        }
       } else {
-        localStorage.removeItem("customRpcUrl");
+        setError("Query failed");
       }
-    } catch {
-      // localStorage unavailable
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  };
 
-  const publicClient = useMemo(
-    () => makePublicClient(customRpc.trim() || undefined),
-    [customRpc]
-  );
-
-  const isCustomRpc = customRpc.trim().length > 0;
+  const usdPrice =
+    rawResult !== null ? (Number(rawResult) / 1000).toFixed(2) : null;
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="mx-auto max-w-3xl px-6 py-16">
-        <header className="mb-12">
+      <div className="mx-auto max-w-xl px-6 py-16">
+        <header className="mb-10">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold tracking-tight">
-              Hyperliquid Precompile Explorer
+            <h1 className="text-2xl font-bold tracking-tight">
+              HyperEVM Precompile Demo
             </h1>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setShowSettings((prev) => !prev)}
-                className={`rounded-md border border-border p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer ${
-                  isCustomRpc ? "text-primary border-primary/50" : ""
-                }`}
-                aria-label="Toggle settings"
-              >
-                <Settings className="h-4 w-4" />
-              </button>
-              <button
-                onClick={toggleTheme}
-                className="rounded-md border border-border p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
-                aria-label="Toggle theme"
-              >
-                {theme === "dark" ? (
-                  <Sun className="h-4 w-4" />
-                ) : (
-                  <Moon className="h-4 w-4" />
-                )}
-              </button>
-            </div>
-          </div>
-          <p className="text-muted-foreground text-lg leading-relaxed max-w-2xl">
-            A lightweight interface for reading on chain data from{" "}
-            <a
-              href="https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/hyperevm/interacting-with-hypercore"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-foreground underline underline-offset-4 hover:text-primary transition-colors"
+            <button
+              onClick={toggleTheme}
+              className="rounded-md border border-border p-2 text-muted-foreground hover:text-foreground hover:bg-accent transition-colors cursor-pointer"
+              aria-label="Toggle theme"
             >
-              Hyperliquid precompiles
-            </a>
-            . Query oracle prices, positions, balances, and more directly from
-            HyperCore, with results guaranteed to match the latest L1 state.
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+          <p className="text-muted-foreground leading-relaxed">
+            Read a spot price from HyperCore L1 via a smart contract precompile.
+            No oracles, no bridges — the value comes directly from the L1 order
+            book at block construction time.
           </p>
-
-          {showSettings && (
-            <div className="mt-6 rounded-lg border border-border bg-card p-4">
-              <div className="flex items-center justify-between mb-2">
-                <label
-                  htmlFor="custom-rpc"
-                  className="text-sm font-medium text-foreground"
-                >
-                  Custom RPC URL
-                </label>
-                {isCustomRpc && (
-                  <button
-                    onClick={() => handleRpcChange("")}
-                    className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    Reset to default
-                  </button>
-                )}
-              </div>
-              <Input
-                id="custom-rpc"
-                placeholder={DEFAULT_RPC_URL}
-                value={customRpc}
-                onChange={(e) => handleRpcChange(e.target.value)}
-              />
-              <p className="mt-2 text-xs text-muted-foreground">
-                {isCustomRpc
-                  ? `Using custom RPC: ${customRpc.trim()}`
-                  : `Using default RPC: ${DEFAULT_RPC_URL}`}
-              </p>
-            </div>
-          )}
         </header>
 
-        <Separator className="mb-10" />
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Spot Price</CardTitle>
+            <CardDescription>
+              Query the current price for a spot market by its index. Enter 1460
+              for VHYPUR/USDC on testnet.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="spot-index"
+                  className="text-sm font-medium text-foreground"
+                >
+                  Spot Index
+                </label>
+                <Input
+                  id="spot-index"
+                  placeholder="1460"
+                  value={spotIndex}
+                  onChange={(e) => setSpotIndex(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !loading) handleQuery();
+                  }}
+                />
+              </div>
 
-        <section>
-          <h2 className="text-sm font-medium text-muted-foreground uppercase tracking-wider mb-6">
-            Available Reads
-          </h2>
-          <div className="grid gap-4">
-            {precompiles.map((config) => (
-              <PrecompileCard
-                key={config.functionName}
-                config={config}
-                publicClient={publicClient}
-              />
-            ))}
-          </div>
-        </section>
+              <Button
+                onClick={handleQuery}
+                disabled={loading}
+                className="w-full"
+                size="sm"
+              >
+                {loading ? "Querying..." : "Query"}
+              </Button>
 
-        <Separator className="mt-10 mb-6" />
+              {error && (
+                <div className="rounded-md bg-destructive/10 border border-destructive/20 p-3">
+                  <p className="text-sm text-destructive">{error}</p>
+                </div>
+              )}
 
-        <footer className="flex flex-col items-center gap-2 text-xs text-muted-foreground">
-          <div>
-            Reading from contract{" "}
-            <code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">
-              0x5911...1d9b
-            </code>{" "}
-            on HyperEVM Testnet
-          </div>
-          <a
-            href="https://github.com/chase-manning/hyperevm-precompile-ui"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors"
-          >
-            <Github className="h-3.5 w-3.5" />
-            Open source on GitHub
-          </a>
+              {rawResult !== null && !error && (
+                <div className="rounded-md bg-muted/50 border border-border p-3 space-y-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-medium text-muted-foreground shrink-0">
+                      raw
+                    </span>
+                    <span className="font-mono text-sm break-all">
+                      {rawResult.toString()}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xs font-medium text-muted-foreground shrink-0">
+                      USD
+                    </span>
+                    <span className="font-mono text-sm">${usdPrice}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <footer className="mt-8 text-center text-xs text-muted-foreground">
+          Reading from contract{" "}
+          <code className="bg-muted px-1.5 py-0.5 rounded text-[11px]">
+            0x5911...1d9b
+          </code>{" "}
+          on HyperEVM Testnet
         </footer>
       </div>
     </div>
